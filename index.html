@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Read Before You Use</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Using memory well matters as much as building good memory. VLM agents often fail even when the answer is in memory; MemRU trains them to read the evidence, then use it.">
+<meta property="og:title" content="Read Before You Use: Improving Visual Memory Utilization in Vision-Language Models">
+<meta property="og:description" content="The evidence is in memory. The VLM still misses it. MemRU trains it to read first, then use.">
+<meta property="og:image" content="static/images/example_read_use.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an argument in five claims. Each claim is a two-column spread (claim text left, evidence chart right) that stacks on narrow screens.
+   Motif: the red dashed "answer-critical evidence" box from the paper's figures marks what the model has to read. */
+:root {
+  /* light: cool mist paper with navy ink */
+  --paper: #e9edf5;
+  --surface: #f9fafe;
+  --ink: #131a33;
+  --ink-2: #454e6b;
+  --muted: #767f9c;
+  --rule: #d3d9e7;
+  --axis: #b5bdd2;
+  --accent: #2b5fd9;        /* MemRU */
+  --accent-wash: #dde6fa;
+  --evidence: #d43c33;      /* dashed evidence box */
+  --plate: #ffffff;
+  --glow: rgba(43, 95, 217, 0.13);
+  --shadow: rgba(19, 26, 51, 0.10);
+  /* chart series (validated: adjacent and all-pairs CVD, both modes) */
+  --c-pix: #eb6834;
+  --c-cap: #2a78d6;
+  --c-read: #e34948;
+  --c-use: #eda100;
+  --c-mid: #c3cadb;
+  --c-ok: #2a78d6;
+  --c-neg: #e34948;
+  --c-pos: #2a78d6;
+  --on-fill: #ffffff;
+  --on-yellow: #0b0b0b;
+
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --wide: 76rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1326; --surface: #18213a; --ink: #e9edf8; --ink-2: #aab3cf; --muted: #7882a3;
+    --rule: #263254; --axis: #3b4870; --accent: #82a8ff; --accent-wash: #1d2b52; --evidence: #ff7a6e;
+    --plate: #eef1f8; --glow: rgba(110, 140, 255, 0.16); --shadow: rgba(0, 0, 0, 0.35);
+    --c-pix: #d95926; --c-cap: #3987e5; --c-read: #b53a3a; --c-use: #c98500; --c-mid: #48557a;
+    --c-ok: #3987e5; --c-neg: #e66767; --c-pos: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0d1326; --surface: #18213a; --ink: #e9edf8; --ink-2: #aab3cf; --muted: #7882a3;
+  --rule: #263254; --axis: #3b4870; --accent: #82a8ff; --accent-wash: #1d2b52; --evidence: #ff7a6e;
+  --plate: #eef1f8; --glow: rgba(110, 140, 255, 0.16); --shadow: rgba(0, 0, 0, 0.35);
+  --c-pix: #d95926; --c-cap: #3987e5; --c-read: #b53a3a; --c-use: #c98500; --c-mid: #48557a;
+  --c-ok: #3987e5; --c-neg: #e66767; --c-pos: #3987e5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; font-size: 93.75%; }
+body {
+  margin: 0; color: var(--ink);
+  background-color: var(--paper);
+  background-image: radial-gradient(70rem 32rem at 50% -8rem, var(--glow), transparent 70%);
+  background-repeat: no-repeat;
+  font: 400 1rem/1.65 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.wrap { max-width: var(--wide); margin-inline: auto; }
+
+.label { font: 500 0.72rem/1.2 var(--f-mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.ev  { color: var(--evidence); font-weight: 600; }
+.use { color: var(--accent); font-weight: 600; }
+
+/* ---------- hero (centered, as in the first version) ---------- */
+.hero { padding-block: clamp(3.4rem, 7vw, 5rem) 2.8rem; text-align: center; display: grid; justify-items: center; }
+.venue { font: 500 0.8rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+h1 {
+  font-family: var(--f-body); font-weight: 600;
+  font-size: clamp(2.15rem, 1.3rem + 3.4vw, 3.65rem); line-height: 1.08;
+  letter-spacing: -0.01em; margin: 1.05rem auto 0; max-width: 18ch; text-wrap: balance;
+}
+.subtitle {
+  font: 400 clamp(1.22rem, 1rem + 0.9vw, 1.65rem)/1.3 var(--f-body);
+  color: var(--ink-2); margin: 0.65rem auto 0; text-wrap: balance;
+}
+.authors { margin-top: 1.9rem; font: 400 1.13rem/1.5 var(--f-display); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 1.5rem; }
+.authors sup, .affil sup { font-size: 0.7em; color: var(--muted); }
+.affil { margin-top: 0.4rem; color: var(--ink-2); font: 400 1rem/1.5 var(--f-display); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.1rem 1.5rem; }
+.note { margin-top: 0.3rem; color: var(--muted); font: 400 0.87rem/1.4 var(--f-display); }
+.links { margin-top: 1.9rem; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
+.btn {
+  display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.6rem 1.15rem; border-radius: 999px;
+  background: var(--ink); color: var(--paper); text-decoration: none; font: 600 0.96rem/1 var(--f-display);
+}
+.btn:hover { background: var(--accent); color: #fff; }
+.btn svg { width: 1em; height: 1em; fill: currentColor; }
+.btn.pending { background: transparent; color: var(--muted); border: 1px dashed var(--axis); pointer-events: none; }
+.tbd { font: 500 0.66rem/1 var(--f-mono); letter-spacing: 0.06em; padding: 0.2rem 0.38rem; border-radius: 4px; background: var(--rule); color: var(--ink-2); margin-left: 0.1rem; }
+.thesis {
+  margin: 2.6rem auto 0; max-width: 58ch;
+  font: 400 clamp(1.1rem, 1rem + 0.45vw, 1.35rem)/1.6 var(--f-body);
+  text-wrap: balance;
+}
+
+/* ---------- example ---------- */
+.example { padding-block: 0.5rem 3rem; display: grid; gap: 1rem; }
+.query { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 1.1rem 1.3rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.4rem 2rem; align-items: end; }
+.query .q { font: 600 clamp(0.98rem, 0.92rem + 0.3vw, 1.12rem)/1.4 var(--f-display); margin: 0; grid-column: 1; }
+.query .gt { grid-column: 2; grid-row: 1 / span 2; text-align: right; }
+.query .gt b { display: block; font: 700 1.2rem/1.2 var(--f-display); color: var(--accent); margin-top: 0.3rem; }
+@media (max-width: 600px) { .query { grid-template-columns: minmax(0, 1fr); } .query .gt { grid-column: 1; grid-row: auto; text-align: left; } }
+.plate { background: var(--plate); border: 1px solid var(--rule); border-radius: 10px; padding: clamp(0.5rem, 1.5vw, 1rem); }
+.cap { font-size: 1rem; color: var(--ink-2); margin: 0.2rem 0 0; }
+
+/* ---------- claims ---------- */
+.claim { padding-block: clamp(2.5rem, 5vw, 3.8rem); border-top: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(1.8rem, 3.5vw, 3.5rem); align-items: start; }
+.claim > * { min-width: 0; }
+@media (max-width: 900px) { .claim { grid-template-columns: minmax(0, 1fr); } }
+.claim .text { display: grid; gap: 0.75rem; }
+h2 { font: 700 clamp(1.45rem, 1.2rem + 1vw, 2.05rem)/1.08 var(--f-display); letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+.claim p { margin: 0; color: var(--ink-2); max-width: 34rem; }
+.claim p strong { color: var(--ink); font-weight: 600; }
+.claim.full { grid-template-columns: minmax(0, 1fr); }
+.claim.full .text p { max-width: none; }
+.claim.full .plate { width: 100%; }
+.claim.full .tiles { width: 100%; max-width: 40rem; margin-inline: auto; }
+.claim.full .tile { text-align: center; }
+
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 0.6rem; }
+.tile { border-top: 2px solid var(--ink); padding-top: 0.6rem; }
+.tile .v { font: 600 1.45rem/1.1 var(--f-display); }
+.tile .v .arrow { color: var(--muted); font-weight: 400; }
+.tile .v .to { color: var(--accent); }
+.tile .l { font-size: 0.88rem; color: var(--ink-2); line-height: 1.4; margin-top: 0.3rem; }
+
+/* ---------- charts ---------- */
+.chart { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 1.2rem clamp(0.9rem, 2vw, 1.4rem) 1rem; font-family: var(--f-display); }
+.chart-title { font: 600 1rem/1.3 var(--f-display); margin: 0; }
+.chart-sub { font: 400 0.85rem/1.4 var(--f-display); color: var(--ink-2); margin: 0.2rem 0 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; margin: 0.9rem 0 0.2rem; font-size: 0.82rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw.sq { border-radius: 2px; }
+
+.rows { margin-top: 0.8rem; display: grid; }
+.row { display: grid; grid-template-columns: var(--lab, 8.5rem) minmax(0, 1fr); align-items: center; column-gap: 0.8rem; min-height: 2.7rem; }
+.row .lab { font-size: 0.88rem; line-height: 1.2; color: var(--ink); }
+.row .lab small { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 0.1rem; }
+.row.group .lab { grid-column: 1 / -1; font: 500 0.68rem/1.2 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-top: 0.7rem; }
+.row.group { min-height: 1.8rem; }
+.plot { position: relative; height: 2.7rem; }
+.gl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--rule); }
+.gl.zero { background: var(--axis); }
+.axis .plot { height: 1.6rem; }
+.rows.tall .row:not(.axis) { min-height: 3.3rem; }
+.rows.tall .row:not(.axis) .plot { height: 3.3rem; }
+.tick { position: absolute; top: 0.3rem; transform: translateX(-50%); font: 400 0.72rem/1 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.axis-cap { text-align: right; font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+
+.dot { position: absolute; top: 60%; width: 11px; height: 11px; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--surface); z-index: 2; }
+.dot::after { content: ""; position: absolute; inset: -9px; }
+.seg { position: absolute; top: 60%; height: 3px; transform: translateY(-50%); background: var(--axis); border-radius: 2px; }
+.val { position: absolute; top: 60%; transform: translateY(-50%); font: 400 0.78rem/1 var(--f-mono); color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.val.l { margin-right: 10px; }
+.val.r { margin-left: 10px; }
+.dlt { position: absolute; top: 0.1rem; transform: translateX(-50%); font: 600 0.78rem/1 var(--f-display); color: var(--ink); white-space: nowrap; }
+
+.bar { position: absolute; top: 50%; height: 18px; transform: translateY(-50%); }
+.bar.pos { background: var(--c-pos); border-radius: 0 4px 4px 0; }
+.bar.neg { background: var(--c-neg); border-radius: 4px 0 0 4px; }
+
+.stack { display: flex; gap: 2px; height: 28px; align-self: center; }
+.stack .s { flex: var(--v) 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; font: 500 0.75rem/1 var(--f-mono); color: var(--on-fill); font-variant-numeric: tabular-nums; }
+.stack .s:first-child { border-radius: 4px 0 0 4px; }
+.stack .s:last-child { border-radius: 0 4px 4px 0; }
+.s.read { background: var(--c-read); }
+.s.use  { background: var(--c-use); color: var(--on-yellow); }
+.s.mid  { background: var(--c-mid); color: transparent; }
+.s.ok   { background: var(--c-ok); }
+
+.row.hl .lab { color: var(--accent); font-weight: 700; }
+.ref-tag { font: 500 0.62rem/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--rule); border-radius: 3px; padding: 0.15rem 0.3rem; margin-left: 0.35rem; vertical-align: 0.1em; }
+
+details.data { margin-top: 0.8rem; font-size: 0.82rem; color: var(--ink-2); }
+details.data summary { cursor: pointer; font-family: var(--f-display); color: var(--muted); }
+details.data .tw { overflow-x: auto; margin-top: 0.5rem; }
+details.data table { border-collapse: collapse; font: 400 0.78rem/1.4 var(--f-mono); font-variant-numeric: tabular-nums; }
+details.data th, details.data td { padding: 0.25rem 0.7rem 0.25rem 0; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+details.data th:first-child, details.data td:first-child { text-align: left; }
+details.data th { color: var(--muted); font-weight: 500; }
+
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: var(--paper); font: 500 0.8rem/1.35 var(--f-display); padding: 0.45rem 0.6rem; border-radius: 6px; max-width: 16rem; }
+
+/* ---------- position ---------- */
+.position { padding-block: clamp(2.5rem, 5vw, 3.8rem); border-top: 1px solid var(--rule); display: grid; gap: 2rem; }
+.points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.2rem, 3vw, 2.5rem); }
+@media (max-width: 800px) { .points { grid-template-columns: minmax(0, 1fr); } }
+.point { border-top: 3px solid var(--ink); padding-top: 0.9rem; display: grid; gap: 0.5rem; align-content: start; }
+.point h3 { font: 700 1.18rem/1.2 var(--f-display); letter-spacing: -0.015em; margin: 0; text-wrap: balance; }
+.point p { margin: 0; color: var(--ink-2); font-size: 0.95rem; }
+
+/* ---------- citation ---------- */
+.cite { padding-block: 2.5rem 3rem; border-top: 1px solid var(--rule); display: grid; gap: 0.9rem; }
+.cite h2 { font-size: 1.4rem; }
+.bib { position: relative; }
+.bib pre { margin: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 1.1rem 1.2rem; overflow-x: auto; font: 400 0.85rem/1.6 var(--f-mono); }
+.copy { position: absolute; top: 0.6rem; right: 0.6rem; font: 600 0.78rem/1 var(--f-display); padding: 0.45rem 0.75rem; border-radius: 6px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); cursor: pointer; }
+.copy:hover { border-color: var(--accent); color: var(--accent); }
+footer { padding-block: 1.5rem 3rem; color: var(--muted); font: 400 0.85rem/1.5 var(--f-display); }
+
+@media (max-width: 560px) {
+  .row { --lab: 6.6rem; column-gap: 0.6rem; }
+  .row .lab { font-size: 0.8rem; }
+  .tiles { grid-template-columns: minmax(0, 1fr); }
+}
+/* ---------- theme toggle ---------- */
+.theme-toggle {
+  position: fixed; z-index: 15;
+  top: calc(env(safe-area-inset-top, 0px) + 14px); right: calc(env(safe-area-inset-right, 0px) + 14px);
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--rule); cursor: pointer;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.theme-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-toggle .moon { display: none; }
+.theme-toggle[data-mode="dark"] .sun { display: none; }
+.theme-toggle[data-mode="dark"] .moon { display: block; }
+
+@media (prefers-reduced-motion: no-preference) { .theme-toggle { transition: border-color .15s, color .15s; } }
+@media (prefers-reduced-motion: no-preference) { .btn, .copy { transition: background-color .15s, color .15s, border-color .15s; } }
+</style>
+<script>
+/* apply a saved theme before first paint */
+try { var t = localStorage.getItem('rbyu-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+</head>
+<body>
+
+<button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme">
+  <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+</button>
+
+<header class="hero wrap">
+  <!-- <div class="venue">CVPR 2027 · arXiv</div> -->
+  <div class="venue">arXiv</div>
+  <h1>Read Before You Use</h1>
+  <p class="subtitle">Improving Visual Memory Utilization in Vision-Language Models</p>
+
+  <div class="authors">
+    <span>Junseok Kim<sup>1</sup></span>
+    <span>Kyungmin Min<sup>1</sup></span>
+    <span>Kyomin Jung<sup>1,2†</sup></span>
+  </div>
+  <div class="affil">
+    <span><sup>1</sup>IPAI, Seoul National University</span>
+    <span><sup>2</sup>Dept. of ECE, Seoul National University</span>
+  </div>
+  <div class="note">† Corresponding author</div>
+
+  <!-- TODO: fill in the real links, then remove class="pending" -->
+  <nav class="links" aria-label="Paper resources">
+    <a class="btn pending" href="#" data-todo="arxiv"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6V2zm8 1.5V8h4.5L14 3.5zM8 12h10v1.5H8V12zm0 3.5h10V17H8v-1.5z"/></svg>Paper<span class="tbd">TBD</span></a>
+    <a class="btn pending" href="#" data-todo="code"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>Code<span class="tbd">TBD</span></a>
+    <a class="btn pending" href="#" data-todo="data"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 3 3.6 3 5.5v13C3 20.4 7 22 12 22s9-1.6 9-3.5v-13C21 3.6 17 2 12 2zm0 2c4.4 0 7 1.3 7 1.5S16.4 7 12 7 5 5.7 5 5.5 7.6 4 12 4zm7 14.5c0 .2-2.6 1.5-7 1.5s-7-1.3-7-1.5v-2.7C6.6 16.6 9.1 17 12 17s5.4-.4 7-1.2v2.7zm0-5c0 .2-2.6 1.5-7 1.5s-7-1.3-7-1.5v-2.7C6.6 11.6 9.1 12 12 12s5.4-.4 7-1.2v2.7zM19 8.5V8.5z"/></svg>Data<span class="tbd">TBD</span></a>
+    <a class="btn" href="#cite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v2H7V4zm-3 4h16v12H4V8zm2 2v8h12v-8H6z"/></svg>BibTeX</a>
+  </nav>
+
+  <p class="thesis">Good memory for a VLM agent takes two things: a system that stores and retrieves the right evidence, and a model that can <span class="ev">read</span> that evidence and <span class="use">use</span> it. Most work so far has gone into the first. We show the second matters just as much. Today’s VLMs often fail even when the answer is sitting in memory.</p>
+</header>
+
+<main>
+  <section class="example wrap" aria-labelledby="ex-q">
+    <div class="query">
+      <span class="label">One question from WorldMemArena · Minecraft</span>
+      <p class="q" id="ex-q">In the step-17 screenshot, with the “Isn’t It Iron Pick” advancement visible, where are the recipe notifications shown?</p>
+      <div class="gt"><span class="label">Answer</span><b>Top-right</b></div>
+    </div>
+    <div class="plate"><img src="static/images/example_read_use.png" alt="Left: the memory entry for step 17, with the answer-critical pixels (two notifications in the top-right corner) boxed in red dashes, and the read probe and original query built from it. Right: the base Qwen3-VL-8B answers 'At the bottom' to both and is wrong; MemRU 8B answers 'Top-Right Corner' and 'Top-Right' and is right." width="1312" height="700"></div>
+    <p class="cap">The answer is in memory, inside the red dashed box. The base model misreads where the notifications are and gets the question wrong. After MemRU training, the same 8B model reads the pixels correctly and answers correctly.</p>
+  </section>
+
+  <!-- Claim 1 -->
+  <section class="claim wrap" aria-labelledby="c1">
+    <div class="text">
+      <span class="label">Observation</span>
+      <h2 id="c1">Having the evidence is not the same as using it</h2>
+      <p>We kept only questions whose memory was verified to contain the answer. <strong>GPT-5-mini still missed 3 in 10.</strong></p>
+      <p>Then we replaced each memory image with a human-written caption and left everything else alone. Accuracy rose by <strong>19 to 30 points</strong> for every model and every memory system. The information was there all along. The models could not get it out of the pixels.</p>
+    </div>
+    <figure class="chart" style="margin:0">
+      <p class="chart-title">Same memory, two forms: QA accuracy (%)</p>
+      <p class="chart-sub">Answer-sufficient WorldMemArena questions only</p>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--c-pix)"></i>Original images</span>
+        <span><i class="sw" style="background:var(--c-cap)"></i>Images replaced by reference captions</span>
+      </div>
+      <div class="rows" id="chart-dumbbell" style="--lab:8.5rem"></div>
+      <details class="data"><summary>Show numbers</summary><div class="tw" id="tbl-dumbbell"></div></details>
+    </figure>
+  </section>
+
+  <!-- Claim 2 -->
+  <section class="claim wrap" aria-labelledby="c2">
+    <div class="text">
+      <span class="label">Observation</span>
+      <h2 id="c2">Captioning every frame won’t save you</h2>
+      <p>If text works, why not caption every image as it is stored? Because the captioner doesn’t know tomorrow’s question.</p>
+      <p>Model-written captions kept the answer in only <strong>61–67%</strong> of memories and pulled accuracy <strong>below raw pixels</strong>. Adding captions next to the images didn’t help either. The human captions only worked because they were written with the answer in view.</p>
+    </div>
+    <figure class="chart" style="margin:0">
+      <p class="chart-title">Accuracy change vs. raw images (pp)</p>
+      <p class="chart-sub">AUGUSTUS memory, Qwen3-VL-4B reader. Raw images score 53.9%.</p>
+      <div class="rows tall" id="chart-delta" style="--lab:11rem"></div>
+    </figure>
+  </section>
+
+  <!-- Claim 3 -->
+  <section class="claim wrap" aria-labelledby="c3">
+    <div class="text">
+      <span class="label">Diagnosis</span>
+      <h2 id="c3">Reading and using are two separate failures</h2>
+      <p>For each answer-critical fact we wrote a short <strong>read probe</strong> (“where does the <i>New Recipes Unlocked!</i> notification appear?”) and checked two things on their own: can the model <span class="ev">read</span> the evidence, and does it <span class="use">use</span> it to answer the real question?</p>
+      <p>About <strong>one in five</strong> questions fail at reading. Another <strong>three in ten</strong> are read correctly and still answered wrong. The split barely moves across memory systems, so the bottleneck sits in the model.</p>
+    </div>
+    <figure class="chart" style="margin:0">
+      <p class="chart-title">Where each question ends up (% of questions)</p>
+      <p class="chart-sub">Qwen3-VL-4B on answer-sufficient memory</p>
+      <div class="legend">
+        <span><i class="sw sq" style="background:var(--c-read)"></i>Read failure</span>
+        <span><i class="sw sq" style="background:var(--c-use)"></i>Read, but not used</span>
+        <span><i class="sw sq" style="background:var(--c-mid)"></i>Correct without reading</span>
+        <span><i class="sw sq" style="background:var(--c-ok)"></i>Read and used</span>
+      </div>
+      <div class="rows" id="chart-stack" style="--lab:8rem"></div>
+      <details class="data"><summary>Show numbers</summary><div class="tw" id="tbl-stack"></div></details>
+    </figure>
+  </section>
+
+  <!-- Approach -->
+  <section class="claim full wrap" aria-labelledby="c4">
+    <div class="text">
+      <span class="label">Approach</span>
+      <h2 id="c4">MemRU: teach the model to read, then to use</h2>
+      <p>Two failures, two training signals. <strong>Read SFT</strong> supervises the model on read probes over the original image and text memory, so it learns to pull the evidence out itself. <strong>Use GRPO</strong> then rewards correct answers to the real questions. The memory system is never touched. Only the reader changes.</p>
+    </div>
+    <div class="plate"><img src="static/images/fig4_overview.png" alt="MemRU overview. (a) Answer-relevant facts from WorldMemArena gold evidence become image and text read probes. (b) Stage 1, Read SFT: correct probe answers are used to fine-tune the model on the original multimodal memory. (c) Stage 2, Use GRPO: the model samples answers to the original question and is updated with outcome rewards." width="2080" height="890"></div>
+    <div class="tiles">
+      <div class="tile"><div class="v">60.1 <span class="arrow">→</span> <span class="to">69.8</span></div><div class="l">Image read-probe accuracy, Qwen3-VL-8B base → MemRU</div></div>
+      <div class="tile"><div class="v">67.9 <span class="arrow">→</span> <span class="to">79.8</span></div><div class="l">Correct answers once the evidence is read, Read SFT alone → with Use GRPO (8B)</div></div>
+    </div>
+  </section>
+
+  <!-- Result -->
+  <section class="claim wrap" aria-labelledby="c5">
+    <div class="text">
+      <span class="label">Result</span>
+      <h2 id="c5">A better reader helps on memory it has never seen</h2>
+      <p>MemRU trains only on WorldMemArena gold evidence. We test it on memories built by three other systems: AUGUSTUS, Omni-SimpleMem and UniversalRAG.</p>
+      <p>Averaged over them, the 8B model gains <strong>6.7 points</strong> over its base, passes <strong>Qwen3-VL-32B</strong>, and lands within <strong>1.9 points of GPT-5-mini</strong>. It is also best overall in three of four settings on MemLens and OpenEQA, two benchmarks it never trained on.</p>
+    </div>
+    <figure class="chart" style="margin:0">
+      <p class="chart-title">QA accuracy (%) averaged over three unseen memory systems</p>
+      <p class="chart-sub">WorldMemArena test set, 2,073 questions</p>
+      <div class="rows" id="chart-dots" style="--lab:10rem"></div>
+      <details class="data"><summary>Show numbers</summary><div class="tw" id="tbl-dots"></div></details>
+    </figure>
+  </section>
+
+  <!-- Position -->
+  <section class="position wrap" aria-labelledby="c6">
+    <div>
+      <span class="label">What we take from this</span>
+      <h2 id="c6" style="margin-top:0.6rem">For memory-augmented VLM agents</h2>
+    </div>
+    <div class="points">
+      <div class="point">
+        <h3>Retrieval is not the finish line</h3>
+        <p>A memory system that returns the right evidence has done half the job. Alongside recall and sufficiency, measure how much of that evidence the model turns into correct answers.</p>
+      </div>
+      <div class="point">
+        <h3>Keep the pixels</h3>
+        <p>A caption written at storage time cannot anticipate the question asked later. Model-written captions lost the answer in a third or more of memories.</p>
+      </div>
+      <div class="point">
+        <h3>Train the reader</h3>
+        <p>Reading and using fail separately and respond to different training signals. A model that reads better improved on every memory system we tested, without changing any of them.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="cite wrap" id="cite">
+    <span class="label">Citation</span>
+    <h2>BibTeX</h2>
+    <div class="bib">
+      <button class="copy" id="copy-bib" type="button">Copy</button>
+<pre id="bib-text">@article{kim2026readbeforeuse,
+  title   = {Read Before You Use: Improving Visual Memory
+             Utilization in Vision-Language Models},
+  author  = {Kim, Junseok and Min, Kyungmin and Jung, Kyomin},
+  journal = {arXiv preprint},
+  year    = {2026}
+}</pre>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">IPAI &amp; Department of ECE, Seoul National University</footer>
+
+<div id="tip" hidden></div>
+
+<script>
+(function () {
+  function h(tag, cls, style, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (style) e.setAttribute('style', style);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function row(label, sub, extraCls) {
+    var r = h('div', 'row' + (extraCls ? ' ' + extraCls : ''));
+    var l = h('div', 'lab', null, label);
+    if (sub) l.appendChild(h('small', null, null, sub));
+    r.appendChild(l);
+    var p = h('div', 'plot');
+    r.appendChild(p);
+    return { row: r, plot: p, lab: l };
+  }
+  function grid(plot, ticks, pos, zero) {
+    ticks.forEach(function (t) { plot.appendChild(h('span', 'gl' + (t === zero ? ' zero' : ''), 'left:' + pos(t) + '%')); });
+  }
+  function axis(host, ticks, pos, fmt) {
+    var a = row('', null, 'axis');
+    ticks.forEach(function (t) { a.plot.appendChild(h('span', 'tick', 'left:' + pos(t) + '%', fmt ? fmt(t) : String(t))); });
+    host.appendChild(a.row);
+  }
+  function table(host, head, rows) {
+    var t = h('table'), tr = h('tr');
+    head.forEach(function (c) { tr.appendChild(h('th', null, null, c)); });
+    var th = h('thead'); th.appendChild(tr); t.appendChild(th);
+    var tb = h('tbody');
+    rows.forEach(function (r) { var x = h('tr'); r.forEach(function (c) { x.appendChild(h('td', null, null, c)); }); tb.appendChild(x); });
+    t.appendChild(tb); host.appendChild(t);
+  }
+  var f1 = function (v) { return v.toFixed(1); };
+  var sgn = function (v) { return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1); };
+
+  /* 1. Dumbbell: original images vs reference captions */
+  var D1 = [
+    { g: 'Gold evidence' },
+    { n: 'Qwen3-VL-4B', a: 61.8, b: 91.6 },
+    { n: 'Qwen3-VL-32B', a: 68.6, b: 91.3 },
+    { n: 'GPT-5-mini', a: 70.2, b: 91.6 },
+    { g: 'Retrieved memory · 4B reader' },
+    { n: 'AUGUSTUS', a: 53.9, b: 75.6 },
+    { n: 'Omni-SimpleMem', a: 61.9, b: 80.9 },
+    { n: 'UniversalRAG', a: 57.0, b: 78.3 }
+  ];
+  (function () {
+    var host = document.getElementById('chart-dumbbell');
+    var pos = function (v) { return (v - 40) / 60 * 100; };
+    var T = [40, 50, 60, 70, 80, 90, 100];
+    D1.forEach(function (d) {
+      if (d.g) { var g = row(d.g, null, 'group'); g.row.removeChild(g.plot); host.appendChild(g.row); return; }
+      var r = row(d.n), p = r.plot, pa = pos(d.a), pb = pos(d.b);
+      grid(p, T, pos);
+      p.appendChild(h('span', 'seg', 'left:' + pa + '%;width:' + (pb - pa) + '%'));
+      p.appendChild(h('span', 'dlt', 'left:' + ((pa + pb) / 2) + '%', sgn(d.b - d.a)));
+      var da = h('span', 'dot', 'left:' + pa + '%;background:var(--c-pix)');
+      da.dataset.tip = d.n + ' · original images: ' + f1(d.a) + '%';
+      var db = h('span', 'dot', 'left:' + pb + '%;background:var(--c-cap)');
+      db.dataset.tip = d.n + ' · reference captions: ' + f1(d.b) + '%';
+      p.appendChild(da); p.appendChild(db);
+      p.appendChild(h('span', 'val l', 'right:' + (100 - pa) + '%', f1(d.a)));
+      p.appendChild(h('span', 'val r', 'left:' + pb + '%', f1(d.b)));
+      host.appendChild(r.row);
+    });
+    axis(host, T, pos);
+    table(document.getElementById('tbl-dumbbell'), ['Setting', 'Images', 'Captions', 'Gain'],
+      D1.filter(function (d) { return !d.g; }).map(function (d) { return [d.n, f1(d.a), f1(d.b), sgn(d.b - d.a)]; }));
+  })();
+
+  /* 2. Diverging bars: caption variants vs raw images */
+  var D2 = [
+    { n: 'Human reference captions', s: 'answer kept: 100%', v: 21.7 },
+    { n: 'Qwen3-VL-4B captions', s: 'answer kept: 67.3%', v: -5.3 },
+    { n: 'GPT-4o-mini captions', s: 'answer kept: 60.8%', v: -7.0 },
+    { n: 'Images + 4B captions', s: 'images kept', v: -1.8 }
+  ];
+  (function () {
+    var host = document.getElementById('chart-delta');
+    var pos = function (v) { return (v + 15) / 40 * 100; };
+    var T = [-10, 0, 10, 20], z = pos(0);
+    D2.forEach(function (d) {
+      var r = row(d.n, d.s), p = r.plot, pv = pos(d.v);
+      grid(p, T, pos, 0);
+      var b;
+      if (d.v >= 0) {
+        b = h('span', 'bar pos', 'left:' + z + '%;width:' + (pv - z) + '%');
+        p.appendChild(h('span', 'val r', 'left:' + pv + '%;top:50%', sgn(d.v)));
+      } else {
+        b = h('span', 'bar neg', 'left:' + pv + '%;width:' + (z - pv) + '%');
+        p.appendChild(h('span', 'val l', 'right:' + (100 - pv) + '%;top:50%', sgn(d.v)));
+      }
+      b.dataset.tip = d.n + ': ' + f1(53.9 + d.v) + '% (' + sgn(d.v) + ' pp vs. images)';
+      p.appendChild(b);
+      host.appendChild(r.row);
+    });
+    axis(host, T, pos, function (t) { return t === 0 ? '0' : sgn(t).replace('.0', ''); });
+  })();
+
+  /* 3. 100% stacked bars: Read / Use outcome */
+  var K = [
+    { k: 'read', n: 'Read failure' },
+    { k: 'use', n: 'Read, but not used' },
+    { k: 'mid', n: 'Correct without reading' },
+    { k: 'ok', n: 'Read and used' }
+  ];
+  var D3 = [
+    { n: 'Gold evidence', v: [21.9, 28.9, 10.2, 39.1] },
+    { n: 'AUGUSTUS', v: [21.7, 32.2, 10.0, 36.1] },
+    { n: 'Omni-SimpleMem', v: [21.0, 31.2, 9.7, 38.1] },
+    { n: 'UniversalRAG', v: [20.9, 31.3, 8.1, 39.8] }
+  ];
+  (function () {
+    var host = document.getElementById('chart-stack');
+    D3.forEach(function (d) {
+      var r = row(d.n);
+      var s = h('div', 'stack');
+      d.v.forEach(function (v, i) {
+        var seg = h('span', 's ' + K[i].k, '--v:' + v, f1(v));
+        seg.dataset.tip = d.n + ' · ' + K[i].n + ': ' + f1(v) + '%';
+        s.appendChild(seg);
+      });
+      r.row.replaceChild(s, r.plot);
+      host.appendChild(r.row);
+    });
+    table(document.getElementById('tbl-stack'), ['Memory'].concat(K.map(function (k) { return k.n; })),
+      D3.map(function (d) { return [d.n].concat(d.v.map(f1)); }));
+  })();
+
+  /* 4. Dot plot: cross-system average */
+  var D4 = [
+    { n: 'GPT-5-mini', v: 62.4, ref: true },
+    { n: 'MemRU (8B)', v: 60.5, hl: true },
+    { n: 'Qwen3-VL-32B', v: 59.4, ref: true },
+    { n: 'Use SFT → Use GRPO', s: 'same 8B base', v: 58.7 },
+    { n: 'MultiHopSpatial', s: '8B', v: 56.9 },
+    { n: 'OPD-V', s: '8B', v: 54.9 },
+    { n: 'Qwen3-VL-8B', s: 'MemRU’s base model', v: 53.8, base: true }
+  ];
+  (function () {
+    var host = document.getElementById('chart-dots');
+    var pos = function (v) { return (v - 50) / 15 * 100; };
+    var T = [50, 55, 60, 65], base = 53.8;
+    D4.forEach(function (d) {
+      var r = row(d.n, d.s, d.hl ? 'hl' : null), p = r.plot, pv = pos(d.v);
+      if (d.ref) r.lab.insertBefore(h('span', 'ref-tag', null, 'ref'), r.lab.childNodes[1] || null);
+      grid(p, T, pos);
+      if (d.hl) {
+        p.appendChild(h('span', 'seg', 'left:' + pos(base) + '%;width:' + (pv - pos(base)) + '%;background:var(--accent-wash);height:6px'));
+        p.appendChild(h('span', 'dlt', 'left:' + ((pos(base) + pv) / 2) + '%;color:var(--accent)', '+6.7 over base'));
+      }
+      var color = d.hl ? 'var(--accent)' : d.base ? 'var(--muted)' : 'var(--ink-2)';
+      var dot = h('span', 'dot', 'left:' + pv + '%;background:' + color + (d.hl ? ';width:14px;height:14px' : ''));
+      dot.dataset.tip = d.n + ': ' + f1(d.v) + '%';
+      p.appendChild(dot);
+      p.appendChild(h('span', 'val r', 'left:' + pv + '%' + (d.hl ? ';color:var(--ink);font-weight:500' : ''), f1(d.v)));
+      host.appendChild(r.row);
+    });
+    axis(host, T, pos);
+    table(document.getElementById('tbl-dots'), ['Model', 'Cross-system avg.'], D4.map(function (d) { return [d.n + (d.s ? ' (' + d.s + ')' : ''), f1(d.v)]; }));
+  })();
+
+  /* shared tooltip */
+  var tip = document.getElementById('tip');
+  document.addEventListener('pointerover', function (e) {
+    var t = e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (!t) { tip.hidden = true; return; }
+    tip.textContent = t.dataset.tip; tip.hidden = false;
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (tip.hidden) return;
+    var x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+    tip.style.left = x + 'px'; tip.style.top = (e.clientY + 16) + 'px';
+  });
+
+  /* theme toggle: light <-> dark, remembered per browser; defaults to the system setting */
+  var root = document.documentElement, tbtn = document.getElementById('theme-toggle');
+  var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function current() { var t = root.getAttribute('data-theme'); return t === 'dark' || t === 'light' ? t : (mq && mq.matches ? 'dark' : 'light'); }
+  function sync() {
+    var m = current();
+    tbtn.dataset.mode = m;
+    tbtn.setAttribute('aria-label', m === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+  }
+  tbtn.addEventListener('click', function () {
+    var next = current() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('rbyu-theme', next); } catch (e) {}
+    sync();
+  });
+  if (mq && mq.addEventListener) mq.addEventListener('change', sync);
+  sync();
+
+  /* copy BibTeX */
+  var btn = document.getElementById('copy-bib'), pre = document.getElementById('bib-text');
+  function selectText() { var r = document.createRange(); r.selectNodeContents(pre); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+  btn.addEventListener('click', function () {
+    var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1600); };
+    try { navigator.clipboard.writeText(pre.textContent).then(done, function () { selectText(); btn.textContent = 'Press Ctrl+C'; }); }
+    catch (err) { selectText(); btn.textContent = 'Press Ctrl+C'; }
+  });
+})();
+</script>
+</body>
+</html>
