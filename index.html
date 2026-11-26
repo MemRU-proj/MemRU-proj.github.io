@@ -101,6 +101,9 @@ h1 {
 .authors { margin-top: 1.9rem; font: 400 1.13rem/1.5 var(--f-display); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 1.5rem; }
 .authors sup, .affil sup { font-size: 0.7em; color: var(--muted); }
 .affil { margin-top: 0.4rem; color: var(--ink-2); font: 400 1rem/1.5 var(--f-display); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.1rem 1.5rem; }
+.email { margin-top: 0.45rem; color: var(--ink-2); font: 400 0.86rem/1.4 var(--f-mono); }
+.email a { color: inherit; text-decoration: none; }
+.email a:hover { color: var(--accent); text-decoration: underline; }
 .note { margin-top: 0.3rem; color: var(--muted); font: 400 0.87rem/1.4 var(--f-display); }
 .links { margin-top: 1.9rem; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
 .btn {
@@ -272,6 +275,7 @@ try { var t = localStorage.getItem('rbyu-theme'); if (t === 'light' || t === 'da
     <span><sup>1</sup>IPAI, Seoul National University</span>
     <span><sup>2</sup>Dept. of ECE, Seoul National University</span>
   </div>
+  <div class="email">{<a href="mailto:kim.junseok@snu.ac.kr">kim.junseok</a>, <a href="mailto:kyungmin97@snu.ac.kr">kyungmin97</a>, <a href="mailto:kjung@snu.ac.kr">kjung</a>}@snu.ac.kr</div>
   <div class="note">† Corresponding author</div>
 
   <!-- TODO: fill in the real links, then remove class="pending" -->
